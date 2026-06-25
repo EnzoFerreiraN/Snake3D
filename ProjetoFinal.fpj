@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Project>
+	<Libs Value="-static -lglut32 -lglu32 -lopengl32 -lwinmm -lgdi32"/>
+	<Flags Value="-DGLUT_STATIC"/>
+	<Target Value="ProjetoFinal.exe"/>
+	<CommandLine Value=""/>
+	<CompilerOptions Value="-Wall -s"/>
+	<DeleteObjectsBefore Value="Yes"/>
+	<DeleteObjectsAfter Value="Yes"/>
+	<DeleteMakefileAfter Value="Yes"/>
+	<DeleteResourcesAfter Value="Yes"/>
+	<EnableTheme Value="Yes"/>
+	<RequiresAdmin Value="No"/>
+	<CompilerType Value="CPP"/>
+	<AppType Value="CONSOLE"/>
+	<Files>
+		<File Name="SnakeJogo.cpp"/>
+		<File Name="stb_image.h"/>
+	</Files>
+</Project>
