@@ -129,6 +129,7 @@ enum CellType { CT_EMPTY = 0, CT_WALL = 1 };
 
 static Cell PORTAL_A = { 0, 0 };
 static Cell PORTAL_B = { 0, 0 };
+static bool wallHorizontal = false;  // false = vertical (coluna), true = horizontal (linha)
 
 // =============================================================================
 //  ESTADO GLOBAL DO JOGO
@@ -530,30 +531,65 @@ static void spawnFood() {
 
 static void spawnPortals() {
     const int maxTries = GRID * GRID * 4;
+    // Interior jogavel: indices de 1 a GRID-2 (borda e' parede)
+    const int lo = 1;
+    const int hi = GRID - 2;       // inclusive
     Cell c;
+    int tries;
 
-    int tries = 0;
-    do {
-        c.x = rand() % WALL_COLUMN;
-        c.z = rand() % GRID;
-        if (++tries > maxTries) { c.x = 0; c.z = GRID / 2; break; }
-    } while (cellInSnake(c) || gridState[c.x][c.z] == CT_WALL || c == food);
-    PORTAL_A = c;
+    if (!wallHorizontal) {
+        // Parede vertical: divide em metade esquerda (x < WALL_COLUMN)
+        //                  e metade direita (x > WALL_COLUMN)
+        tries = 0;
+        do {
+            c.x = lo + rand() % (WALL_COLUMN - lo);   // [1, WALL_COLUMN)
+            c.z = lo + rand() % (hi - lo + 1);        // [1, GRID-2]
+            if (++tries > maxTries) { c.x = lo; c.z = GRID / 2; break; }
+        } while (cellInSnake(c) || gridState[c.x][c.z] == CT_WALL || c == food);
+        PORTAL_A = c;
 
-    tries = 0;
-    do {
-        c.x = WALL_COLUMN + 1 + rand() % (GRID - WALL_COLUMN - 1);
-        c.z = rand() % GRID;
-        if (++tries > maxTries) { c.x = GRID - 1; c.z = GRID / 2; break; }
-    } while (cellInSnake(c) || gridState[c.x][c.z] == CT_WALL || c == food || c == PORTAL_A);
-    PORTAL_B = c;
+        tries = 0;
+        do {
+            c.x = WALL_COLUMN + 1 + rand() % (hi - WALL_COLUMN);  // (WALL_COLUMN, GRID-2]
+            c.z = lo + rand() % (hi - lo + 1);
+            if (++tries > maxTries) { c.x = hi; c.z = GRID / 2; break; }
+        } while (cellInSnake(c) || gridState[c.x][c.z] == CT_WALL || c == food || c == PORTAL_A);
+        PORTAL_B = c;
+    } else {
+        // Parede horizontal: divide em metade superior (z < WALL_COLUMN)
+        //                    e metade inferior (z > WALL_COLUMN)
+        tries = 0;
+        do {
+            c.x = lo + rand() % (hi - lo + 1);        // [1, GRID-2]
+            c.z = lo + rand() % (WALL_COLUMN - lo);   // [1, WALL_COLUMN)
+            if (++tries > maxTries) { c.x = GRID / 2; c.z = lo; break; }
+        } while (cellInSnake(c) || gridState[c.x][c.z] == CT_WALL || c == food);
+        PORTAL_A = c;
+
+        tries = 0;
+        do {
+            c.x = lo + rand() % (hi - lo + 1);
+            c.z = WALL_COLUMN + 1 + rand() % (hi - WALL_COLUMN);  // (WALL_COLUMN, GRID-2]
+            if (++tries > maxTries) { c.x = GRID / 2; c.z = hi; break; }
+        } while (cellInSnake(c) || gridState[c.x][c.z] == CT_WALL || c == food || c == PORTAL_A);
+        PORTAL_B = c;
+    }
 }
 
 static void spawnWall() {
     if (wallsActive) return;
 
-    for (int z = 0; z < GRID; z++)
-        gridState[WALL_COLUMN][z] = CT_WALL;
+    // Sorteia orientacao 50/50: vertical (coluna) ou horizontal (linha)
+    wallHorizontal = (rand() % 2 == 0);
+    if (wallHorizontal) {
+        // Parede horizontal: preenche a linha central (z == WALL_COLUMN)
+        for (int x = 0; x < GRID; x++)
+            gridState[x][WALL_COLUMN] = CT_WALL;
+    } else {
+        // Parede vertical: preenche a coluna central (x == WALL_COLUMN)
+        for (int z = 0; z < GRID; z++)
+            gridState[WALL_COLUMN][z] = CT_WALL;
+    }
 
     wallsActive = true;
     spawnPortals();
@@ -566,6 +602,15 @@ static void initGame() {
     wallsActive    = false;
     portalsActive  = false;
     portalCooldown = 0;
+    wallHorizontal = false;
+
+    // Borda solida do mapa: anel de CT_WALL em torno de todo o grid
+    for (int i = 0; i < GRID; i++) {
+        gridState[0][i]      = CT_WALL;  // coluna esquerda
+        gridState[GRID-1][i] = CT_WALL;  // coluna direita
+        gridState[i][0]      = CT_WALL;  // linha superior
+        gridState[i][GRID-1] = CT_WALL;  // linha inferior
+    }
 
     snake.clear();
     Cell h  = { GRID/2,     GRID/2 };
@@ -1000,17 +1045,19 @@ static void drawFood() {
 // =============================================================================
 
 static void drawWalls() {
-    if (!wallsActive) return;
-
+    // Desenha todas as celulas CT_WALL do gridState (borda permanente + parede central)
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, texWall);
     glColor3f(1.0f, 1.0f, 1.0f);
 
-    for (int z = 0; z < GRID; z++) {
-        glPushMatrix();
-        glTranslatef(gx(WALL_COLUMN), CELL * 0.5f, gz(z));
-        drawCubeTex(CELL * 0.95f, CELL * 2.0f, CELL * 0.95f);
-        glPopMatrix();
+    for (int x = 0; x < GRID; x++) {
+        for (int z = 0; z < GRID; z++) {
+            if (gridState[x][z] != CT_WALL) continue;
+            glPushMatrix();
+            glTranslatef(gx(x), CELL * 0.5f, gz(z));
+            drawCubeTex(CELL * 0.95f, CELL * 2.0f, CELL * 0.95f);
+            glPopMatrix();
+        }
     }
 
     glDisable(GL_TEXTURE_2D);

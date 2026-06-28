@@ -26,12 +26,13 @@ Ao iniciar ou reiniciar a partida (tecla R), `initGame` executa:
 
 1. Zera `gridState` com `memset` — remove todas as paredes.
 2. Reseta flags: `wallsActive = false`, `portalsActive = false`, `portalCooldown = 0`.
-3. Constrói a cobra inicial com **3 segmentos** centrados no grid:
+3. Constrói a **borda sólida** do mapa: preenche com `CT_WALL` as linhas e colunas de índice 0 e `GRID-1` em `gridState`, formando um anel de paredes ao redor de todo o grid.
+4. Constrói a cobra inicial com **3 segmentos** centrados no grid:
    - Cabeça em `(GRID/2, GRID/2)`
    - Dois segmentos de corpo à esquerda
-4. Define `curDir = nextDir = {1, 0}` (movimento inicial para a direita).
-5. Reseta `score`, `applesEaten`, `gameOver` e `stepMs = STEP_MS_INIT`.
-6. Chama `spawnFood()` para posicionar a primeira maçã.
+5. Define `curDir = nextDir = {1, 0}` (movimento inicial para a direita).
+6. Reseta `score`, `applesEaten`, `gameOver` e `stepMs = STEP_MS_INIT`.
+7. Chama `spawnFood()` para posicionar a primeira maçã.
 
 ---
 
@@ -91,7 +92,9 @@ Para atingir a velocidade máxima são necessárias 18 maçãs (`(150 - 60) / 5 
 
 A cada múltiplo de `APPLES_PER_WALL` maçãs comidas, `spawnWall` é chamada uma vez:
 
-1. Preenche toda a coluna `WALL_COLUMN = GRID / 2` com `CT_WALL` em `gridState`.
+1. **Sorteia a orientação** 50/50: vertical (coluna) ou horizontal (linha).
+   - **Vertical**: preenche toda a coluna `WALL_COLUMN = GRID / 2` com `CT_WALL`.
+   - **Horizontal**: preenche toda a linha `WALL_COLUMN = GRID / 2` com `CT_WALL`.
 2. Define `wallsActive = true`.
 3. Chama `spawnPortals()` e `portalsActive = true`.
 4. Toca o som de parede.
@@ -100,10 +103,15 @@ A parede tem altura visual de 2 células (`CELL * 2.0`) para aparecer como um ob
 
 ### Geração dos portais (`spawnPortals`)
 
-Dois portais são gerados, um de cada lado da parede:
+Dois portais são gerados, um de cada lado da parede, respeitando a orientação sorteada:
 
-- **Portal A** — em `x < WALL_COLUMN` (lado esquerdo), posição Z aleatória
-- **Portal B** — em `x > WALL_COLUMN` (lado direito), posição Z aleatória
+- **Parede vertical** (`wallHorizontal = false`):
+  - **Portal A** — em `x ∈ [1, WALL_COLUMN)` (metade esquerda), Z aleatório
+  - **Portal B** — em `x ∈ (WALL_COLUMN, GRID-2]` (metade direita), Z aleatório
+
+- **Parede horizontal** (`wallHorizontal = true`):
+  - **Portal A** — em `z ∈ [1, WALL_COLUMN)` (metade superior), X aleatório
+  - **Portal B** — em `z ∈ (WALL_COLUMN, GRID-2]` (metade inferior), X aleatório
 
 Ambos evitam células da cobra, paredes e a posição da comida atual.
 
@@ -119,9 +127,11 @@ Três condições encerram a partida:
 
 | Condição | Verificação |
 |---|---|
-| **Saída do grid** | `!cellInGrid(head.x, head.z)` |
+| **Saída do grid** (segurança) | `!cellInGrid(head.x, head.z)` |
 | **Colisão com parede** | `gridState[head.x][head.z] == CT_WALL` |
 | **Auto-colisão** | `head == snake[i]` para qualquer `i` de 0 até `size-2` |
+
+A **borda do mapa** é tratada como parede (`CT_WALL`), portanto a colisão com ela é capturada pela segunda condição antes de a cobra sair dos índices válidos do grid. A verificação de saída funciona como rede de segurança para casos extremos.
 
 Em qualquer um dos casos: `gameOver = true`, o som de game over é tocado e o timer para de se re-agendar. O jogo continua renderizando normalmente, mas com a sobreposição da tela de fim.
 

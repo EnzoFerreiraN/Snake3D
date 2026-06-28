@@ -1,0 +1,29 @@
+Pasta de capturas de tela para o relatorio.tex
+===============================================
+
+Adicione aqui os seguintes arquivos de imagem (PNG ou JPG)
+para que as figuras do relatório sejam exibidas ao compilar:
+
+  jogo-3a-pessoa.png
+      Figura 1 — Visão em terceira pessoa: cobra, maçã 3D e skybox.
+      Sugestão: câmera padrão (modo 0) com alguns segmentos de corpo visíveis.
+
+  parede-portais.png
+      Figura 2 — Parede central com os dois portais (laranja e azul) ativos.
+      Sugestão: capturar após comer 5 maçãs, parede bem centralizada.
+
+  primeira-pessoa.png
+      Figura 3 — Câmera em primeira pessoa (modo 1).
+      Alternativa: tela de game over ou vista de topo.
+
+Após adicionar os arquivos, edite relatorio.tex e em cada figura:
+  - Remova a linha \fbox{...} (placeholder)
+  - Descomente a linha com \includegraphics correspondente
+
+Exemplo:
+  % De:
+  \fbox{\begin{minipage}{...} ... \end{minipage}}
+  % Para:
+  \includegraphics[width=.75\textwidth]{screenshots/jogo-3a-pessoa.png}
+
+Formatos aceitos pelo pdflatex: PNG, JPG/JPEG, PDF.

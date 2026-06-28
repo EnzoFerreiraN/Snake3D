@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Layout>
 	<Files>
-		<File Name="SnakeJogo.cpp" Top="Yes" Tabpos="1" TopLine="1">
-			<Cursor Line="10" Column="75"/>
+		<File Name="SnakeJogo.cpp" Top="Yes" Tabpos="1" TopLine="541">
+			<Cursor Line="566" Column="27"/>
+		</File>
+		<File Name="stb_image.h" Top="No" Tabpos="2" TopLine="431">
+			<Cursor Line="1" Column="1"/>
 		</File>
 	</Files>
 </Layout>

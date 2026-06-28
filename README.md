@@ -2,7 +2,7 @@
 
 Implementação do clássico jogo **Snake** em três dimensões, desenvolvida em **C++** com **OpenGL/GLUT** como trabalho final da disciplina de Computação Gráfica.
 
-O jogo apresenta uma cobra 3D que se move num grid, come maçãs que aparecem aleatoriamente, cresce a cada refeição e ganha velocidade progressivamente. À medida que o jogador acumula maçãs, uma **parede central** divide o campo e **portais** surgem para teleportar a cobra de um lado ao outro. Há três modos de câmera (terceira pessoa, primeira pessoa e vista aérea), texturas reais carregadas de arquivos, modelos OBJ e iluminação de Gouraud.
+O jogo apresenta uma cobra 3D que se move num grid, come maçãs que aparecem aleatoriamente, cresce a cada refeição e ganha velocidade progressivamente. O mapa é delimitado por uma **borda sólida** de paredes que encerram a partida ao contato. À medida que o jogador acumula maçãs, uma **parede central** — sorteada aleatoriamente como vertical ou horizontal — divide o campo ao meio e **portais** surgem em cada lado dela para teleportar a cobra. Há três modos de câmera (terceira pessoa, primeira pessoa e vista aérea), texturas reais carregadas de arquivos, modelos OBJ e iluminação de Gouraud.
 
 ---
 
