@@ -55,7 +55,7 @@ Cada portal é uma composição de elementos animados, todos usando `glutGet(GLU
 
 Todo o efeito usa **blending aditivo** (`GL_SRC_ALPHA, GL_ONE`) com `glDepthMask(GL_FALSE)`, criando o brilho transparente sem obscurecer objetos atrás do portal.
 
-### Skybox — cubo de ambiente
+### Skybox — cubo de ambiente (billboard estático)
 
 O skybox é um cubo de lado 400 (`R = 200`) com 6 quads texturizados, centrado dinamicamente na posição do olho para que nunca pareça se afastar. É renderizado com:
 
@@ -69,7 +69,18 @@ A posição do olho é extraída da matriz modelview atual (inversa de R^T · t)
 
 ## Texturas
 
-### Carregamento com stb_image (`loadTexture`)
+### Biblioteca de carregamento: stb_image
+
+O projeto usa a biblioteca **stb_image** (`stb_image.h`) para decodificar imagens de disco. Ela é uma biblioteca **header-only** de domínio público (Sean Barrett / nothings): toda a implementação fica em um único arquivo `.h`, incluído com `#define STB_IMAGE_IMPLEMENTATION` para gerar o código de decodificação em apenas uma unidade de compilação (linha 22 de `SnakeJogo.cpp`).
+
+```cpp
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+```
+
+A função `stbi_load(path, &w, &h, &n, 0)` retorna os pixels em memória e detecta automaticamente o formato (JPG, PNG, BMP, etc.), devolvendo os canais reais `n` (3 = RGB, 4 = RGBA). A memória é liberada com `stbi_image_free` após o upload para a GPU.
+
+### Carregamento com `loadTexture`
 
 A função `loadTexture(path, fallback, wrap, mipmap)` tenta carregar a imagem com `stbi_load`. Se o arquivo existir, cria uma textura OpenGL com:
 
@@ -79,6 +90,73 @@ A função `loadTexture(path, fallback, wrap, mipmap)` tenta carregar a imagem c
 O parâmetro `wrap` define `GL_REPEAT` (para texturas do cenário que se repetem) ou `GL_CLAMP_TO_EDGE` (para as 6 faces do skybox, eliminando costuras nas bordas).
 
 Se o arquivo não existir ou falhar no carregamento, `makeProceduralTex` é chamado como fallback.
+
+---
+
+### Conceito: mipmapping e filtragem de texturas
+
+#### O problema de aliasing na minificação
+
+Quando uma textura é amostrada em escala menor do que o tamanho original (objeto visto de longe), um único pixel da tela pode cobrir dezenas de texels. Se apenas um desses texels for amostrado a cada frame, o pixel "pula" entre valores diferentes conforme o objeto se move — causando **flickering** (cintilação) e **aliasing** (serrilhado).
+
+#### A solução: pirâmide de mipmaps
+
+O **mipmapping** (Williams, 1983) resolve o problema pré-calculando versões progressivamente menores da textura. Cada nível tem metade da resolução do anterior:
+
+```
+Nível 0: 512×512  (textura original)
+Nível 1: 256×256
+Nível 2: 128×128
+  ...
+Nível N:   1×1
+```
+
+Na hora de amostrar, o OpenGL escolhe automaticamente o nível cujo texel tem o tamanho mais próximo do pixel na tela. O resultado é estável e sem aliasing, sem custo extra em tempo de execução (só ocupa ~33% a mais de memória de textura).
+
+No projeto, os mipmaps são gerados pela **GLU** com `gluBuild2DMipmaps`, que faz o downsampling dos níveis na CPU antes de enviar para a GPU:
+
+```cpp
+gluBuild2DMipmaps(GL_TEXTURE_2D, fmt, w, h, fmt, GL_UNSIGNED_BYTE, data);
+```
+
+#### Modos de filtragem
+
+O OpenGL oferece três estratégias principais de filtragem, configuradas via `glTexParameteri`:
+
+| Modo | Constante GL | Descrição | Qualidade | Custo |
+|---|---|---|---|---|
+| **Nearest** | `GL_NEAREST` | Amostra o texel mais próximo (pixelado) | Baixa | Mínimo |
+| **Bilinear** | `GL_LINEAR` | Interpola entre os 4 texels vizinhos do nível mais próximo | Média | Baixo |
+| **Trilinear** | `GL_LINEAR_MIPMAP_LINEAR` | Bilinear em cada um dos dois níveis de mip adjacentes + interpolação entre eles | Alta | Moderado |
+
+O projeto usa **filtragem trilinear** para todas as texturas com mipmap (chão, paredes, corpo, skybox):
+
+```cpp
+// Minificação — trilinear (interpola entre dois níveis de mip)
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+// Magnificação — bilinear (sem mips necessários ao ampliar)
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+```
+
+- `GL_TEXTURE_MIN_FILTER`: controla objetos distantes (textura minificada → usa mipmap).
+- `GL_TEXTURE_MAG_FILTER`: controla objetos próximos (textura ampliada → sem mipmap, só bilinear).
+
+Para a maçã (sem mipmap), ambos os filtros usam apenas `GL_LINEAR` (bilinear), já que não há pirâmide de mips disponível.
+
+#### Wrap modes: `GL_REPEAT` e `GL_CLAMP_TO_EDGE`
+
+O **wrap mode** controla o que acontece quando as coordenadas UV saem do intervalo [0, 1]:
+
+- **`GL_REPEAT`**: a textura se repete periodicamente — usada no chão (repetição 4× para simular grama com detalhe) e nas paredes.
+- **`GL_CLAMP_TO_EDGE`**: o valor da borda da textura é repetido além do limite — usada nas 6 faces do skybox para evitar **costuras** visíveis (linhas escuras/brilhantes nas bordas onde duas faces se encontram).
+
+```cpp
+// Skybox — sem repetição, sem costuras
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+```
+
+---
 
 ### Texturas procedurais (fallback)
 
@@ -93,15 +171,17 @@ Se o arquivo não existir ou falhar no carregamento, `makeProceduralTex` é cham
 | `TK_HEAD` | Amarelo sólido | Cabeça (fallback) |
 | `TK_SKY` | Gradiente azul vertical | Skybox (fallback) |
 
+As texturas procedurais também recebem mipmaps via `gluBuild2DMipmaps` e filtro trilinear, igualando o comportamento às texturas de arquivo.
+
 ### Mapeamento de texturas no jogo
 
-| Textura | Arquivo | Aplicada em |
-|---|---|---|
-| `texFloor` | `Grass005_1K-JPG_Color.jpg` | Chão (repetição 4×) |
-| `texBody` | `Stylized_Scales_003_basecolor.png` | Corpo e cabeça da cobra |
-| `texWall` | `PavingStones138_1K-JPG_Color.jpg` | Parede central |
-| `texFood` | `food_apple_01_diff_4k.jpg` | Modelo da maçã (sem mipmap) |
-| `texSky[0..5]` | `skybox/posx/negx/posy/negy/posz/negz.jpg` | 6 faces do skybox |
+| Textura | Arquivo | Aplicada em | Mipmap |
+|---|---|---|---|
+| `texFloor` | `Grass005_1K-JPG_Color.jpg` | Chão (repetição 4×) | Sim (trilinear) |
+| `texBody` | `Stylized_Scales_003_basecolor.png` | Corpo e cabeça da cobra | Sim (trilinear) |
+| `texWall` | `PavingStones138_1K-JPG_Color.jpg` | Parede central | Sim (trilinear) |
+| `texFood` | `food_apple_01_diff_4k.jpg` | Modelo da maçã | **Não** (bilinear) |
+| `texSky[0..5]` | `skybox/posx/negx/posy/negy/posz/negz.jpg` | 6 faces do skybox | Sim (trilinear) |
 
 ---
 
@@ -147,3 +227,31 @@ Toda a geometria é compilada em uma **display list OpenGL** (`glNewList`/`glEnd
 | `textures/snake/snake_head.obj` | `CELL * 2.10` | Cabeça da cobra |
 
 Se qualquer modelo falhar no carregamento (`mesh.list == 0`), o jogo usa automaticamente o cubo-fallback correspondente, sem travar.
+
+---
+
+## Bibliotecas e métodos utilizados — resumo
+
+### Bibliotecas
+
+| Biblioteca | Função no pipeline de texturas/formas |
+|---|---|
+| **stb_image** (`stb_image.h`) | Decodificação de JPG/PNG para pixels na CPU (`stbi_load`) — header-only, sem dependência externa |
+| **GLU** (`glu32`) | `gluBuild2DMipmaps` (geração da pirâmide de mips), `gluSphere`/`gluCylinder`/`gluNewQuadric` (geometria do corpo), `gluQuadricTexture` (UV automático nos quadrics) |
+| **GLUT** (`glut32`) | `glutSolidSphere`, `glutWireSphere`, `glutSolidTorus` (portais e portais), fontes bitmap para HUD, loop principal e callbacks |
+| **OpenGL fixed-function** (`opengl32`) | Upload de texturas (`glTexImage2D`, `glTexParameteri`, `glBindTexture`), renderização de primitivas, display lists |
+
+### Métodos de texturização
+
+| Método | Onde se aplica no projeto |
+|---|---|
+| **Mipmapping** (Williams, 1983) | Todas as texturas exceto a da maçã — pirâmide de resoluções pré-calculada pela GLU |
+| **Filtragem trilinear** (`GL_LINEAR_MIPMAP_LINEAR`) | Minificação de chão, paredes, cobra, skybox |
+| **Filtragem bilinear** (`GL_LINEAR`) | Magnificação de todas as texturas; única filtragem usada na maçã |
+| **Tiling / `GL_REPEAT`** | Chão (repetição 4×) e paredes — uma textura pequena cobre uma área grande |
+| **`GL_CLAMP_TO_EDGE`** | Skybox — elimina costuras entre as 6 faces do cubo de ambiente |
+| **Texturas procedurais** | Fallback gerado na CPU (64×64 RGBA) quando os arquivos não existem |
+| **Coordenadas UV automáticas** (`gluQuadricTexture`) | Corpo da cobra (esferas e cilindros GLU) |
+| **Coordenadas UV manuais** (`glTexCoord2f`) | Cubo texturizado (`drawCubeTex`) e faces do skybox |
+| **Display lists** (`glNewList`/`glCallList`) | Modelos OBJ compilados uma vez e reutilizados a cada frame |
+| **Blending aditivo** (`GL_SRC_ALPHA, GL_ONE`) | Efeito de brilho dos portais — additive blending não escurece o fundo |
