@@ -1,14 +1,9 @@
-// =============================================================================
-//  SnakeJogo.cpp — Snake 3D em C++ com OpenGL / GLUT clássica (glut32)
-//  Trabalho Final — Computação Gráfica
-// =============================================================================
+
 //
 //  COMPILAÇÃO (Windows / glut32 estático — mesmo ambiente do ProjetoFinal.fpj):
 //    g++ SnakeJogo.cpp -o ProjetoFinal.exe -std=c++0x -DGLUT_STATIC -static ^
 //        -lglut32 -lglu32 -lopengl32 -lwinmm -lgdi32
 //
-//  TEXTURAS: carregadas de textures/ via stb_image (fallback procedural).
-//  MODELOS:  maçã e cabeça da cobra lidos de .obj (fallback cubo).
 //
 //  CONTROLES:
 //    Setas (ou WASD)  — mudar direção da cobra
@@ -18,11 +13,11 @@
 //    Arrastar mouse   — orbitar câmera de 3ª pessoa
 // =============================================================================
 
-// ─── stb_image — carregamento de JPG/PNG ─────────────────────────────────────
+// carregamento de PNG/JPEG PARA TEXTURA
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-// ─── Includes condicionais (macOS vs Windows/Linux) ──────────────────────────
+
 #ifdef __APPLE__
 #  define GL_SILENCE_DEPRECATION
 #  include <GLUT/glut.h>
@@ -34,7 +29,7 @@
 #  include <GL/glu.h>
 #endif
 
-// Som via winmm (Windows) ou afplay/POSIX (macOS)
+// Som 
 #ifdef _WIN32
 #  include <windows.h>
 #  include <mmsystem.h>
@@ -42,9 +37,9 @@
 #    pragma comment(lib, "winmm.lib")
 #  endif
 #elif defined(__APPLE__)
-#  include <unistd.h>      // fork, execlp, setpgid, _exit
-#  include <signal.h>      // kill, SIGKILL
-#  include <sys/wait.h>    // waitpid
+#  include <unistd.h>     
+#  include <signal.h>      
+#  include <sys/wait.h>    
 #endif
 
 #include <cmath>
@@ -59,30 +54,30 @@
 #  define M_PI 3.14159265358979323846
 #endif
 
-// GL_CLAMP_TO_EDGE pode não estar nos headers antigos do glut32 (OpenGL 1.1)
+
 #ifndef GL_CLAMP_TO_EDGE
 #  define GL_CLAMP_TO_EDGE 0x812F
 #endif
 
-// =============================================================================
-//  CONFIGURAÇÃO — edite aqui para ajustar o jogo
-// =============================================================================
 
-#define GRID            30      // células em cada dimensão do grid (20×20)
-#define CELL            1.0f   // tamanho de cada célula em unidades GL
-#define STEP_MS_INIT    150    // milissegundos por passo (velocidade inicial)
-#define STEP_MS_MIN      60    // milissegundos mínimos (velocidade máxima)
+//CONFIGURACAO DO JOGO
+
+
+#define GRID            30      // DIMENSAO DO GRID
+#define CELL            1.0f   // TAMANHO DA CELULA
+#define STEP_MS_INIT    150    // (velocidade inicial)
+#define STEP_MS_MIN      60    // (velocidade máxima)
 #define SPEED_INCR        5    // redução em ms a cada maçã comida
 #define APPLES_PER_WALL   5    // maçãs necessárias para surgir a parede central
 
-// ─── Caminhos de textura (fallback procedural se o arquivo não existir) ───────
+//CAMINHOS DE TEXTURA
 #define TEX_FLOOR "textures/grass/Grass005_1K-JPG_Color.jpg"
 #define TEX_BODY  "textures/snake/Stylized_Scales_003_basecolor.png"
 #define TEX_WALL  "textures/wall/PavingStones138_1K-JPG_Color.jpg"
 #define TEX_FOOD  "textures/apple/food_apple_01_diff_4k.jpg"
 #define TEX_HEAD  "textures/snake/Material_01.png"
 
-// ─── Faces do skybox (ordem: +X -X +Y -Y +Z -Z) ─────────────────────────────
+//FACES DA SKYBOX
 #define SKY_POSX "textures/skybox/posx.jpg"
 #define SKY_NEGX "textures/skybox/negx.jpg"
 #define SKY_POSY "textures/skybox/posy.jpg"
@@ -90,20 +85,19 @@
 #define SKY_POSZ "textures/skybox/posz.jpg"
 #define SKY_NEGZ "textures/skybox/negz.jpg"
 
-// ─── Modelos OBJ ─────────────────────────────────────────────────────────────
+//MODELOS OBJ
 #define OBJ_APPLE "textures/apple/food_apple_01_4k.obj"
 #define OBJ_HEAD  "textures/snake/snake_head.obj"
 
-// ─── Arquivos de som (silencioso se não existir) ─────────────────────────────
+//ARQUIVOS DE SOM
 #define SND_EAT      "sounds/eat.wav"
 #define SND_PORTAL   "sounds/portal.wav"
 #define SND_WALL     "sounds/wall.wav"
 #define SND_GAMEOVER "sounds/gameover.wav"
 #define SND_BGM      "sounds/bgm.mp3"
 
-// =============================================================================
+
 //  ESTRUTURAS
-// =============================================================================
 
 // Célula do grid (posição em coordenadas de grid)
 struct Cell {
@@ -121,9 +115,7 @@ struct Dir {
 // Tipo de célula no grid lógico
 enum CellType { CT_EMPTY = 0, CT_WALL = 1 };
 
-// =============================================================================
 //  PAREDES E PORTAIS
-// =============================================================================
 
 #define WALL_COLUMN (GRID / 2)
 
@@ -131,9 +123,9 @@ static Cell PORTAL_A = { 0, 0 };
 static Cell PORTAL_B = { 0, 0 };
 static bool wallHorizontal = false;  // false = vertical (coluna), true = horizontal (linha)
 
-// =============================================================================
+
 //  ESTADO GLOBAL DO JOGO
-// =============================================================================
+
 
 static std::vector<Cell> snake;
 static Dir  curDir  = {1, 0};
@@ -161,16 +153,16 @@ static bool  mouseDown  = false;
 
 static int winW = 800, winH = 600;
 
-// ─── Texturas ─────────────────────────────────────────────────────────────────
+// Texturas 
 static GLuint texFloor = 0, texBody = 0, texWall = 0, texFood = 0, texHead = 0;
 static GLuint texSky[6] = {0,0,0,0,0,0};
 
-// ─── Quadric para o corpo da cobra (esferas + cilindros via GLU) ───────────
+// Quadric para o corpo da cobra 
 static GLUquadric* bodyQuad = NULL;
 
-// =============================================================================
+
 //  SOM
-// =============================================================================
+
 
 // PID do processo-filho que toca a BGM em loop no macOS (-1 = inativo)
 #ifdef __APPLE__
@@ -181,7 +173,6 @@ static void playSound(const char* filename) {
 #ifdef _WIN32
     PlaySoundA(filename, NULL, SND_ASYNC | SND_FILENAME | SND_NODEFAULT);
 #elif defined(__APPLE__)
-    // Dispara afplay em background (non-blocking); ignora falhas silenciosamente
     char cmd[600];
     snprintf(cmd, sizeof(cmd), "afplay \"%s\" >/dev/null 2>&1 &", filename);
     system(cmd);
@@ -230,9 +221,9 @@ static void toggleBGM() {
     else         stopBGM();
 }
 
-// =============================================================================
-//  TEXTURAS — geração procedural (fallback)
-// =============================================================================
+
+//  TEXTURAS — (fallback)
+
 
 enum TexKind { TK_CHECKER, TK_BRICK, TK_SCALES, TK_APPLE, TK_HEAD, TK_SKY };
 
@@ -306,10 +297,7 @@ static GLuint makeProceduralTex(TexKind kind) {
     return tex;
 }
 
-// ─── loadTexture: tenta arquivo real; fallback procedural ────────────────────
-// wrap:   GL_REPEAT (objetos) ou GL_CLAMP_TO_EDGE (skybox)
-// mipmap: true  → gluBuild2DMipmaps + LINEAR_MIPMAP_LINEAR (padrão)
-//         false → glTexImage2D + GL_LINEAR sem mipmap (atlas com fundo preto)
+//loadTexture: tenta arquivo real; fallback procedural 
 static GLuint loadTexture(const char* path, TexKind fallback,
                           GLint wrap = GL_REPEAT, bool mipmap = true)
 {
@@ -342,10 +330,8 @@ static GLuint loadTexture(const char* path, TexKind fallback,
     return tex;
 }
 
-// =============================================================================
-//  OBJ LOADER — malha simples compilada em display list
-// =============================================================================
 
+//  OBJ LOADER — malha compilada em display list
 struct Mesh {
     GLuint list;   // 0 = não carregado (usa fallback cubo)
     Mesh() : list(0) {}
@@ -369,7 +355,7 @@ struct ObjData {
 static ObjData::FaceVert parseFaceVert(const char* tok) {
     ObjData::FaceVert fv = {0,0,0};
     // sscanf aceita campos vazios tratando-os como 0 somente se usarmos "%d/%d/%d"
-    // mas "%d//%d" falha. Fazemos parse manual:
+    // mas "%d//%d" falha. Parse manual:
     int v=0, t=0, n=0;
     const char* p = tok;
     // v
@@ -389,7 +375,6 @@ static ObjData::FaceVert parseFaceVert(const char* tok) {
 }
 
 // Carrega um .obj e o compila como display list normalizada para caber em escala
-// targetSize: o maior lado da bounding box ficará com este tamanho.
 static bool loadOBJ(const char* path, Mesh& mesh, float targetSize) {
     FILE* f = fopen(path, "r");
     if (!f) return false;
@@ -495,16 +480,14 @@ static bool loadOBJ(const char* path, Mesh& mesh, float targetSize) {
 
 // Carrega as duas malhas OBJ
 static void loadMeshes() {
-    // Maçã: bounding box real ~0.10 unidades; queremos ~0.7 * CELL
+    // Maçã
     loadOBJ(OBJ_APPLE, meshApple, CELL * 0.70f);
-    // Cabeça: bounding box real ~2.7 unidades; queremos ~1.8 * CELL
-    // (normalizado pelo eixo maior → largura/altura casamcom o tubo do corpo)
+    // Cabeça:
     loadOBJ(OBJ_HEAD,  meshHead,  CELL * 2.1f);
 }
 
-// =============================================================================
-//  LÓGICA DO JOGO — helpers
-// =============================================================================
+//  LÓGICA DO JOGO 
+
 
 static bool cellInGrid(int x, int z) {
     return x >= 0 && x < GRID && z >= 0 && z < GRID;
@@ -582,11 +565,9 @@ static void spawnWall() {
     // Sorteia orientacao 50/50: vertical (coluna) ou horizontal (linha)
     wallHorizontal = (rand() % 2 == 0);
     if (wallHorizontal) {
-        // Parede horizontal: preenche a linha central (z == WALL_COLUMN)
         for (int x = 0; x < GRID; x++)
             gridState[x][WALL_COLUMN] = CT_WALL;
     } else {
-        // Parede vertical: preenche a coluna central (x == WALL_COLUMN)
         for (int z = 0; z < GRID; z++)
             gridState[WALL_COLUMN][z] = CT_WALL;
     }
@@ -631,9 +612,8 @@ static void initGame() {
     spawnFood();
 }
 
-// =============================================================================
+
 //  PORTAL
-// =============================================================================
 
 static bool checkPortal(Cell& head) {
     if (!portalsActive || portalCooldown > 0) return false;
@@ -655,9 +635,9 @@ static bool checkPortal(Cell& head) {
     return true;
 }
 
-// =============================================================================
+
 //  PASSO DO JOGO
-// =============================================================================
+
 
 static void step() {
     if (gameOver) return;
@@ -718,9 +698,9 @@ static void timer(int) {
     glutPostRedisplay();
 }
 
-// =============================================================================
+
 //  RENDERIZAÇÃO — utilitários de coordenadas e geometria
-// =============================================================================
+
 
 static inline float gx(int x) { return (x - GRID * 0.5f + 0.5f) * CELL; }
 static inline float gz(int z) { return (z - GRID * 0.5f + 0.5f) * CELL; }
@@ -767,15 +747,11 @@ static void drawCubeTex(float sx, float sy, float sz) {
     glEnd();
 }
 
-// =============================================================================
+// 
 //  RENDERIZAÇÃO — skybox
-// =============================================================================
+// 
 //
 //  Faces:  0=+X  1=-X  2=+Y  3=-Y  4=+Z  5=-Z
-//  O cubo tem lado 2*R, centrado no olho. Iluminação desligada para que
-//  as cores das texturas apareçam puras (céu não é iluminado pela luz da cena).
-//  glDepthMask(FALSE) faz o skybox ser pintado mas não escreve no Z-buffer,
-//  portanto todos os objetos da cena ficam "na frente" dele.
 
 static void drawSkybox() {
     // Extrai posição atual do olho da matriz de modelview
@@ -869,9 +845,9 @@ static void drawSkybox() {
     glPopAttrib();
 }
 
-// =============================================================================
+
 //  RENDERIZAÇÃO — chão com textura de grama
-// =============================================================================
+
 
 static void drawFloor() {
     glEnable(GL_TEXTURE_2D);
@@ -906,14 +882,14 @@ static void drawFloor() {
     glEnable(GL_LIGHTING);
 }
 
-// =============================================================================
+
 //  RENDERIZAÇÃO — cobra
 //
 //  Cabeça: modelo OBJ texturizado orientado para curDir (ou cubo-fallback).
 //  Corpo:  tubo liso — esferas nas juntas + cilindros de ligação, com afinamento
 //          gradual do pescoço até a cauda. Textura de escamas (texBody) mapeada
 //          automaticamente pelo GLU quadric.
-// =============================================================================
+
 
 // Raio do segmento i de um total n: interpola pescoço → cauda
 static inline float bodyRadiusAt(int i, int n) {
@@ -1011,9 +987,9 @@ static void drawSnake() {
     glDisable(GL_TEXTURE_2D);
 }
 
-// =============================================================================
-//  RENDERIZAÇÃO — comida (maçã 3D flutuante e rotativa)
-// =============================================================================
+
+//  RENDERIZAÇÃO — comida 
+
 
 static void drawFood() {
     glEnable(GL_TEXTURE_2D);
@@ -1040,9 +1016,9 @@ static void drawFood() {
     glDisable(GL_TEXTURE_2D);
 }
 
-// =============================================================================
+
 //  RENDERIZAÇÃO — parede central (cubos com textura de pedra/piso)
-// =============================================================================
+
 
 static void drawWalls() {
     // Desenha todas as celulas CT_WALL do gridState (borda permanente + parede central)
@@ -1063,9 +1039,9 @@ static void drawWalls() {
     glDisable(GL_TEXTURE_2D);
 }
 
-// =============================================================================
+
 //  RENDERIZAÇÃO — portais (esferas animadas com efeito de brilho "glow")
-// =============================================================================
+
 
 static void drawPortal(float wx, float wz,
                        float coreR, float coreG, float coreB,
@@ -1143,9 +1119,9 @@ static void drawPortals() {
                1.0f, 0.5f, 0.0f);
 }
 
-// =============================================================================
+
 //  CÂMERAS
-// =============================================================================
+
 
 static void setupCameraPerspective() {
     glMatrixMode(GL_PROJECTION);
@@ -1202,9 +1178,9 @@ static void setupCameraTopDown() {
               0.0f, 0.0f, -1.0f);
 }
 
-// =============================================================================
+
 //  HUD
-// =============================================================================
+
 
 static void drawString2D(float x, float y, const char* s, void* font) {
     glRasterPos2f(x, y);
@@ -1281,9 +1257,8 @@ static void drawHUD() {
     glPopMatrix();
 }
 
-// =============================================================================
-//  DISPLAY — função principal de renderização
-// =============================================================================
+
+//  DISPLAY 
 
 static void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1318,9 +1293,9 @@ static void display() {
     glutSwapBuffers();
 }
 
-// =============================================================================
+
 //  CARREGAMENTO DE TEXTURAS E MODELOS
-// =============================================================================
+
 
 static void loadTextures() {
     // Texturas de cor — fallback procedural se arquivo ausente
@@ -1350,9 +1325,9 @@ static void loadTextures() {
     gluQuadricTexture(bodyQuad, GL_TRUE);
 }
 
-// =============================================================================
+
 //  INICIALIZAÇÃO DO OpenGL
-// =============================================================================
+
 
 static void initGL() {
     glClearColor(0.08f, 0.08f, 0.18f, 1.0f);
@@ -1383,9 +1358,9 @@ static void initGL() {
     glShadeModel(GL_SMOOTH);
 }
 
-// =============================================================================
-//  RESHAPE
-// =============================================================================
+
+//  RESHAPE (tamago da janela) 
+
 
 static void reshape(int w, int h) {
     winW = w;
@@ -1393,9 +1368,9 @@ static void reshape(int w, int h) {
     glViewport(0, 0, winW, winH);
 }
 
-// =============================================================================
+
 //  INPUT — teclado
-// =============================================================================
+
 
 static void keyboard(unsigned char key, int /*x*/, int /*y*/) {
     switch (key) {
@@ -1440,9 +1415,9 @@ static void keyboard(unsigned char key, int /*x*/, int /*y*/) {
     glutPostRedisplay();
 }
 
-// =============================================================================
-//  INPUT — teclas especiais (setas)
-// =============================================================================
+
+//  INPUT — setas
+
 
 static void specialKeys(int key, int /*x*/, int /*y*/) {
     Dir d; d.dx = 0; d.dz = 0;
@@ -1456,9 +1431,9 @@ static void specialKeys(int key, int /*x*/, int /*y*/) {
     if (!d.isOpposite(curDir)) nextDir = d;
 }
 
-// =============================================================================
-//  INPUT — mouse (órbita da câmera de 3ª pessoa)
-// =============================================================================
+
+//  INPUT — mouse 
+
 
 static void mouseButton(int button, int state, int x, int y) {
     if (button == GLUT_LEFT_BUTTON) {
@@ -1485,9 +1460,9 @@ static void mouseMotion(int x, int y) {
     glutPostRedisplay();
 }
 
-// =============================================================================
+
 //  MAIN
-// =============================================================================
+
 
 int main(int argc, char** argv) {
     srand((unsigned)time(NULL));
